@@ -14,7 +14,7 @@ public class Principal {
 
     private static final String URL_PADRAO_SEASON = "https://www.omdbapi.com/?t=%s&season=%d&apikey=%s";
 
-    private static final String API_KEY = "40a98bd0";
+    private static final String API_KEY = System.getenv("API_KEY_FILMES");
 
     private ConvertDados conversor = new ConvertDados();
 
