@@ -1,12 +1,15 @@
 package br.com.filmes.screenmatch.principal;
 
+import br.com.filmes.screenmatch.model.DadosEpisodios;
 import br.com.filmes.screenmatch.model.DadosSerie;
 import br.com.filmes.screenmatch.model.DadosTemporadas;
+import br.com.filmes.screenmatch.model.Episodio;
 import br.com.filmes.screenmatch.service.ConsumoAPI;
 import br.com.filmes.screenmatch.service.ConvertDados;
 
-import java.util.ArrayList;
-import java.util.Scanner;
+import java.time.LocalDate;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class Principal {
 
@@ -27,14 +30,35 @@ public class Principal {
 
         var json = ConsumoAPI.obterDados(String.format(URL_PADRAO, nomeSerieParam, API_KEY));
         var dados = conversor.converterDados(json, DadosSerie.class);
-        var episodios = new ArrayList<DadosTemporadas>();
+
+        var temporadas = new ArrayList<DadosTemporadas>();
+
         for (int i = 1; i < dados.totalTemporadas(); i++) {
             var url = String.format(URL_PADRAO_SEASON, nomeSerieParam, i, API_KEY);
             json = ConsumoAPI.obterDados(url);
-            episodios.add(conversor.converterDados(json, DadosTemporadas.class));
+            temporadas.add(conversor.converterDados(json, DadosTemporadas.class));
         }
 
-        episodios.forEach(System.out::println);
+//        List<DadosEpisodios> episodios = new ArrayList<>();
+//
+//        episodios = temporadas
+//                .stream()
+//                .flatMap(t -> t.episodios().stream())
+//                .filter(e -> !e.avaliacao().equalsIgnoreCase("N/A"))
+//                .sorted(Comparator.comparing(DadosEpisodios::avaliacao).reversed())
+//                .limit(5)
+//                .collect(Collectors.toList());
+
+        List<Episodio> eps = temporadas
+                .stream()
+                .flatMap(t -> t.episodios()
+                        .stream()
+                        .map(d -> new Episodio(t.numeroTemporada(), d))
+                )
+                .sorted(Comparator.comparing(Episodio::getAvaliacao).reversed())
+                .limit(5)
+                .collect(Collectors.toList());
+        eps.forEach(System.out::println);
 
         s.close();
     }
