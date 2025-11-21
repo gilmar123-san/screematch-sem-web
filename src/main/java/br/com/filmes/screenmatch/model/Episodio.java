@@ -1,6 +1,8 @@
 package br.com.filmes.screenmatch.model;
 
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 public class Episodio {
@@ -26,7 +28,6 @@ public class Episodio {
         } catch (DateTimeParseException e) {
             this.dataLancamento = null;
         }
-
     }
 
     public Integer getTemporada() {
@@ -71,12 +72,13 @@ public class Episodio {
 
     @Override
     public String toString() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
         return "Episodio{" +
                 "temporada=" + temporada +
                 ", titulo='" + titulo + '\'' +
                 ", episodio=" + episodio +
                 ", avaliacao=" + avaliacao +
-                ", dataLancamento=" + dataLancamento +
+                ", dataLancamento=" + (dataLancamento != null ? dataLancamento.format(formatter) : dataLancamento )+
                 '}';
     }
 }
