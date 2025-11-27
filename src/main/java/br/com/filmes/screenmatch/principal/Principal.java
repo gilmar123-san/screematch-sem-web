@@ -1,112 +1,94 @@
 package br.com.filmes.screenmatch.principal;
 
-import br.com.filmes.screenmatch.model.DadosEpisodios;
 import br.com.filmes.screenmatch.model.DadosSerie;
 import br.com.filmes.screenmatch.model.DadosTemporadas;
-import br.com.filmes.screenmatch.model.Episodio;
+import br.com.filmes.screenmatch.model.exceptions.ServiceException;
 import br.com.filmes.screenmatch.service.ConsumoAPI;
 import br.com.filmes.screenmatch.service.ConvertDados;
 
-import java.time.LocalDate;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Principal {
 
-    private static final String URL_PADRAO = "https://www.omdbapi.com/?t=%s&apikey=%s";
+    private final String ENDERECO = "https://www.omdbapi.com/?t=";
 
-    private static final String URL_PADRAO_SEASON = "https://www.omdbapi.com/?t=%s&season=%d&apikey=%s";
-
-    private static final String API_KEY = System.getenv("API_KEY_FILMES");
+    private static final String API_KEY = String.format("&apikey=%s", System.getenv("API_KEY_FILMES"));
 
     private ConvertDados conversor = new ConvertDados();
 
-    private Scanner s = new Scanner(System.in);
+    private Scanner leitura = new Scanner(System.in);
+
+    private ConsumoAPI consumo = new ConsumoAPI();
+
+    private List<DadosSerie> listDadosSerie = new ArrayList<>();
 
     public void exibeMenu() {
+        int opcao = -1;
+        do {
+            var menu = """
+                    1 - Buscar séries
+                    2 - Buscar episódios
+                    3 - Listar séries
+                    0 - Sair                                 
+                    """;
 
-        System.out.println("Digite o nome da série para consulta:");
-        var nomeSerieParam = s.nextLine().replace(" ", "+");
-
-        var json = ConsumoAPI.obterDados(String.format(URL_PADRAO, nomeSerieParam, API_KEY));
-        var dados = conversor.converterDados(json, DadosSerie.class);
-
-        var temporadas = new ArrayList<DadosTemporadas>();
-
-        for (int i = 1; i < dados.totalTemporadas(); i++) {
-            var url = String.format(URL_PADRAO_SEASON, nomeSerieParam, i, API_KEY);
-            json = ConsumoAPI.obterDados(url);
-            temporadas.add(conversor.converterDados(json, DadosTemporadas.class));
-        }
-
-        List<DadosEpisodios> episodios = new ArrayList<>();
-
-        episodios = temporadas
-                .stream()
-                .flatMap(t -> t.episodios().stream())
-                .filter(e -> !e.avaliacao().equalsIgnoreCase("N/A"))
-                .sorted(Comparator.comparing(DadosEpisodios::avaliacao).reversed())
-                .collect(Collectors.toList());
-
-//        episodios.stream()
-//                .filter(e -> !e.avaliacao().equals("N/A"))
-//                .peek(e -> System.out.printf("Primeiro filtro(N/A) %s%n", e))
-//                .sorted(Comparator.comparing(DadosEpisodios::avaliacao).reversed())
-//                .peek(e -> System.out.printf("Ordenação %s%n", e))
-//                .limit(10)
-//                .peek(e -> System.out.printf("Limit %s%n", e))
-//                .map(e -> e.titulo().toUpperCase())
-//                .peek(e -> System.out.printf("Map %s%n", e))
-//                        .forEach(System.out::println);
-
-        List<Episodio> eps = temporadas.stream()
-                .flatMap(t -> t.episodios()
-                        .stream()
-                        .map(d -> new Episodio(t.numeroTemporada(), d)))
-                .collect(Collectors.toList());
-
-        eps.forEach(System.out::println);
-
-        System.out.print("Informe o nome do episódio: ");
-        var nomeTitulo = s.nextLine();
-
-        var epFilter = eps.stream()
-                .filter(e -> e.getTitulo().toLowerCase().contains(nomeTitulo.toLowerCase()))
-                .findFirst();
-
-        if(epFilter.isPresent()) {
-            System.out.println("Ep encontrado!");
-            System.out.println(epFilter.get());
-        } else {
-            System.out.println("Ep não encontrado!");
-        }
-
-        System.out.println("A partir de que ano você quer ver os episódios? ");
-        var ano = s.nextInt();
-        s.nextLine();
-
-        LocalDate dataBusca = LocalDate.of(ano, 1, 1);
-
-        eps.stream()
-                .filter(e -> Objects.nonNull(e) && e.getDataLancamento().isAfter(dataBusca))
-                .forEach(System.out::println);
-
-        Map<Integer, Double> avalicoesTemporada = eps.stream()
-                .filter(e -> e.getAvaliacao() > 0.0)
-                .collect(Collectors.groupingBy(Episodio::getTemporada, Collectors.averagingDouble(Episodio::getAvaliacao)));
-
-        System.out.println(avalicoesTemporada);
-
-        DoubleSummaryStatistics est = eps.stream()
-                .filter(e -> e.getAvaliacao() > 0.0)
-                        .collect(Collectors.summarizingDouble(Episodio::getAvaliacao));
-
-        System.out.printf("Média: %.2f %n", est.getAverage());
-        System.out.printf("Melhor Ep: %.2f %n", est.getMax());
-        System.out.printf("Pior Ep: %.2f %n", est.getMin());
-
-        s.close();
+            System.out.println(menu);
+            try {
+                opcao = leitura.nextInt();
+                leitura.nextLine();
+                switch (opcao) {
+                    case 1 -> buscarSerieWeb();
+                    case 2 -> buscarEpisodioPorSerie();
+                    case 3 -> imprimirSeriesBuscadas();
+                    case 0 -> System.out.println("Saindo...");
+                    default -> System.out.println("Opção inválida");
+                }
+            } catch (ServiceException e) {
+                System.out.printf("Error: %s %n", e.getMessage());
+            } catch (InputMismatchException e) {
+                System.out.println("Opção inválida! Tente uma das opções possíveis!");
+                System.out.println();
+                opcao = -1;
+                leitura.nextLine();
+            }
+        } while (opcao != 0);
+        leitura.close();
     }
 
+    private void imprimirSeriesBuscadas() {
+        if (this.listDadosSerie.isEmpty()) {
+            System.out.println("Ainda não existe nenhuma séria nessa lista!");
+        }
+        this.listDadosSerie.forEach(System.out::println);
+    }
 
+    private void buscarSerieWeb() throws ServiceException {
+        DadosSerie dados = getDadosSerie();
+        System.out.println(dados);
+    }
+
+    private DadosSerie getDadosSerie() throws ServiceException {
+        System.out.println("Digite o nome da série para busca");
+        var nomeSerie = leitura.nextLine();
+        var json = consumo.obterDados(ENDERECO + nomeSerie.replace(" ", "+") + API_KEY);
+        if (json.isEmpty() || json.toLowerCase().contains("error")) {
+            throw new ServiceException("Nenhuma série encontrada!");
+        }
+
+        DadosSerie dados = conversor.converterDados(json, DadosSerie.class);
+        listDadosSerie.add(dados);
+        return dados;
+    }
+
+    private void buscarEpisodioPorSerie() throws ServiceException {
+        DadosSerie dadosSerie = getDadosSerie();
+        List<DadosTemporadas> temporadas = new ArrayList<>();
+
+        for (int i = 1; i <= dadosSerie.totalTemporadas(); i++) {
+            var json = consumo.obterDados(ENDERECO + dadosSerie.titulo().replace(" ", "+") + "&season=" + i + API_KEY);
+            DadosTemporadas dadosTemporada = conversor.converterDados(json, DadosTemporadas.class);
+            temporadas.add(dadosTemporada);
+        }
+        temporadas.forEach(System.out::println);
+    }
 }
